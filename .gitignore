@@ -1,8 +1,30 @@
-# Terraform
+# Terraform working directory
 .terraform/
+
+# Terraform state
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+
+# Terraform variable files containing environment-specific values
+*.tfvars
+*.tfvars.json
+
+# Allow safe example variables
+!terraform.tfvars.example
+
+# Terraform plans
+*.tfplan
+*.plan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
 # Environment / secrets
 .env
@@ -10,7 +32,7 @@
 *.pem
 *.key
 
-# AWS local files
+# AWS local configuration
 .aws/
 
 # macOS
