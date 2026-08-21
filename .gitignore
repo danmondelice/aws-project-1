@@ -1,0 +1,17 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# AWS local files
+.aws/
+
+# macOS
+.DS_Store
