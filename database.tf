@@ -39,7 +39,7 @@ resource "aws_db_instance" "main" {
   deletion_protection       = var.ha_mode
   skip_final_snapshot       = !var.ha_mode
   final_snapshot_identifier = var.ha_mode ? "${local.name_prefix}-mysql-final" : null
-  apply_immediately         = !var.ha_mode
+  apply_immediately         = true
 
   tags = {
     Name = "${local.name_prefix}-mysql"

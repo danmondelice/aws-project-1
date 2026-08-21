@@ -37,6 +37,41 @@ The environment includes:
 
 Lab mode reduces cost and is not designed to survive the loss of the AZ containing its NAT Gateway or only application instance. HA mode removes these deliberate cost optimizations.
 
+## Validated Lab-to-HA upgrade
+
+Both operating modes were deployed and verified in `us-east-2` on August 21, 2026. The validation started with the cost-optimized lab configuration and then changed only `ha_mode` to `true`.
+
+| Evidence | Lab baseline | HA validation |
+|---|---|---|
+| Auto Scaling capacity | `min=1`, `desired=1`, `max=2` | `min=2`, `desired=2`, `max=4` |
+| Application placement | One healthy instance | Two healthy instances, one in `us-east-2a` and one in `us-east-2b` |
+| ALB targets | One healthy target | Two healthy targets |
+| NAT gateways | One available gateway shared by both app subnets | Two available gateways, one per public subnet |
+| RDS | Private, encrypted, Single-AZ, one-day backups | Private, encrypted, Multi-AZ, seven-day backups, deletion protection enabled |
+| Terraform convergence | No changes | No changes |
+
+The HA upgrade plan contained two additions, three in-place changes, and no destruction. It added the second Elastic IP and NAT Gateway, moved the AZ2 application default route to its local NAT Gateway, expanded the Auto Scaling Group, and converted RDS to Multi-AZ. RDS modifications use `apply_immediately = true` so this short-lived portfolio validation can prove the resulting state without waiting for a maintenance window.
+
+The evidence can be reproduced with:
+
+```bash
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names cloud-portfolio-lab-asg
+
+aws elbv2 describe-target-health \
+  --target-group-arn "$(terraform output -raw target_group_arn)"
+
+aws ec2 describe-nat-gateways \
+  --filter 'Name=tag:Name,Values=cloud-portfolio-lab-nat-*'
+
+aws rds describe-db-instances \
+  --db-instance-identifier cloud-portfolio-lab-mysql
+
+terraform plan -detailed-exitcode
+```
+
+Optional AWS Console screenshots can be added under `docs/screenshots/` to complement this reproducible CLI evidence. Screenshots should show the ASG instance list, ALB target health, NAT gateway list, RDS availability configuration, and the final no-change Terraform plan without exposing account credentials or secret values.
+
 ## Immutable application deployment
 
 The landing page is installed by `user_data.sh` through the EC2 Launch Template. Application changes are deployed immutably:
@@ -78,6 +113,13 @@ Destroy the environment promptly when testing is complete:
 
 ```bash
 terraform destroy
+```
+
+When HA mode is active, first return to lab mode and apply that transition. This disables RDS deletion protection and restores teardown-safe snapshot behavior before destruction:
+
+```bash
+terraform apply -var="ha_mode=false"
+terraform destroy -var="ha_mode=false"
 ```
 
 After teardown, verify that NAT Gateways, Elastic IPs, RDS instances or snapshots, EC2 instances, and load balancers no longer remain in the account.
