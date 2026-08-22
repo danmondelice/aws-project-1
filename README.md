@@ -22,7 +22,10 @@ The environment includes:
 - Systems Manager administration with no inbound SSH or port 22 rule.
 - IMDSv2 enforcement and encrypted EC2 root volumes.
 - Private, encrypted RDS MySQL with RDS-managed credentials in Secrets Manager.
+- MySQL TLS enforcement through a custom RDS parameter group.
 - CPU target tracking, CloudWatch alarms, and an SNS alert topic.
+- Optional ACM-backed HTTPS with HTTP-to-HTTPS redirect when a certificate ARN is supplied.
+- Restricted security-group egress between the ALB, application, database, and required AWS APIs.
 
 ## Lab and HA modes
 
@@ -71,6 +74,38 @@ terraform plan -detailed-exitcode
 ```
 
 Optional AWS Console screenshots can be added under `docs/screenshots/` to complement this reproducible CLI evidence. Screenshots should show the ASG instance list, ALB target health, NAT gateway list, RDS availability configuration, and the final no-change Terraform plan without exposing account credentials or secret values.
+
+## Production Hardening Roadmap
+
+The following controls are implemented in Terraform:
+
+- An optional HTTPS listener uses an issued, same-Region ACM certificate and the `ELBSecurityPolicy-TLS13-1-2-2021-06` security policy. When enabled, the HTTP listener returns a permanent redirect to HTTPS.
+- RDS enforces encrypted client connections with `require_secure_transport=1` (enabled).
+- HA mode enables RDS Enhanced Monitoring at 60-second granularity through a dedicated service role.
+- CloudWatch alarms cover RDS high CPU and low free storage in addition to application and ALB health.
+- ALB egress is restricted to HTTP in the private application subnet ranges, application egress is restricted to HTTPS and MySQL in the database subnet range, and the database security group has no outbound rule.
+
+The deployable controls were validated in HA mode. A replacement EC2 instance successfully bootstrapped with HTTPS-only internet egress, both instances remained online in Systems Manager, both ALB targets were healthy, RDS reported Multi-AZ with a 60-second monitoring interval and an in-sync TLS parameter group, all five CloudWatch alarms were `OK`, and the final Terraform plan reported no changes.
+
+The HTTPS listener and redirect configuration were validated by Terraform but not activated in the student account because it contained neither an issued ACM certificate nor a Route 53 hosted zone. This avoids presenting an untrusted self-signed certificate as production security evidence.
+
+HTTPS activation requires a domain and an issued ACM certificate in the ALB Region. Provide it without committing account-specific values:
+
+```hcl
+acm_certificate_arn = "arn:aws:acm:us-east-2:123456789012:certificate/example"
+```
+
+Recommended next production controls:
+
+- Manage public DNS in Route 53 and automate ACM DNS validation and renewal.
+- Add AWS WAF managed rule groups, access logging for the ALB, and centralized log retention.
+- Replace NAT-based AWS API access with interface VPC endpoints for SSM, EC2 Messages, SSM Messages, CloudWatch Logs, and Secrets Manager; add an S3 gateway endpoint where appropriate.
+- Use a customer-managed KMS key with rotation and scoped key policies for RDS, EBS, Secrets Manager, SNS, and log encryption.
+- Add RDS connection, latency, failover, and event-subscription alarms based on measured workload baselines.
+- Configure Session Manager session logging, organization-level CloudTrail, AWS Config, GuardDuty, Security Hub, and automated security findings.
+- Add automated Terraform checks (`fmt`, `validate`, linting, policy-as-code, and plan review) in CI with short-lived OIDC credentials.
+- Use remote encrypted Terraform state with locking, versioning, least-privilege access, and state-recovery procedures.
+- Set production deletion protection and final-snapshot retention independently from the temporary portfolio validation lifecycle.
 
 ## Immutable application deployment
 

@@ -38,6 +38,17 @@ variable "ha_mode" {
   default     = false
 }
 
+variable "acm_certificate_arn" {
+  description = "Optional ARN of an issued ACM certificate in the deployment region; enables HTTPS and redirects HTTP to HTTPS"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.acm_certificate_arn == null || startswith(var.acm_certificate_arn, "arn:aws:acm:${var.aws_region}:")
+    error_message = "acm_certificate_arn must be null or an ACM certificate ARN from the configured AWS region."
+  }
+}
+
 variable "instance_type" {
   description = "EC2 instance type for the application tier"
   type        = string

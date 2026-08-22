@@ -11,10 +11,25 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+resource "aws_db_parameter_group" "mysql" {
+  name   = "${local.name_prefix}-mysql-tls"
+  family = "mysql8.4"
+
+  parameter {
+    name  = "require_secure_transport"
+    value = "1"
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-mysql-tls"
+  }
+}
+
 resource "aws_db_instance" "main" {
   identifier = "${local.name_prefix}-mysql"
 
   engine         = "mysql"
+  engine_version = "8.4.9"
   instance_class = var.db_instance_class
 
   allocated_storage     = var.db_allocated_storage
@@ -28,6 +43,7 @@ resource "aws_db_instance" "main" {
   manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
+  parameter_group_name   = aws_db_parameter_group.mysql.name
   vpc_security_group_ids = [aws_security_group.database.id]
   publicly_accessible    = false
   multi_az               = var.ha_mode
@@ -40,6 +56,9 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot       = !var.ha_mode
   final_snapshot_identifier = var.ha_mode ? "${local.name_prefix}-mysql-final" : null
   apply_immediately         = true
+
+  monitoring_interval = var.ha_mode ? 60 : 0
+  monitoring_role_arn = var.ha_mode ? aws_iam_role.rds_enhanced_monitoring.arn : null
 
   tags = {
     Name = "${local.name_prefix}-mysql"

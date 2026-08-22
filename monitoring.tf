@@ -100,3 +100,45 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
     aws_sns_topic.alerts.arn
   ]
 }
+
+resource "aws_cloudwatch_metric_alarm" "database_high_cpu" {
+  alarm_name          = "${local.name_prefix}-database-high-cpu"
+  alarm_description   = "RDS CPU utilization exceeds 80 percent"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
+  threshold           = 80
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.identifier
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "database_low_storage" {
+  alarm_name          = "${local.name_prefix}-database-low-storage"
+  alarm_description   = "RDS free storage is below 5 GiB"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
+  threshold           = 5368709120
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.identifier
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
