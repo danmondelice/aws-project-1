@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Live Engineering Stats | AWS Portfolio{% endblock %}
+{% block body_class %}portfolio-theme{% endblock %}
+{% block content %}
+<section class="stats-shell">
+  <div class="stats-heading"><div><p class="portfolio-eyebrow">Live backend evidence</p><h1>Engineering Statistics</h1><p>First-party, anonymous activity recorded by Flask in private RDS. No raw IP address is stored.</p></div><button class="portfolio-button" type="button" data-refresh-stats>Refresh metrics</button></div>
+  {% if not stats.database_available %}
+  <section class="privacy-note"><strong>Degraded mode:</strong> the web tier is healthy, but RDS is temporarily unavailable. Database-backed counters will recover automatically when connectivity returns; see <a href="{{ url_for('ready') }}">/ready</a>.</section>
+  {% endif %}
+  <section class="stats-grid" id="traffic">
+    <article><span>Total page views</span><strong data-stat="page_views">{{ stats.page_views }}</strong><small>Successful HTML page requests</small></article>
+    <article><span>Unique visitors</span><strong data-stat="unique_visitors">{{ stats.unique_visitors }}</strong><small>Anonymous random browser IDs</small></article>
+    <article><span>Views in 24 hours</span><strong data-stat="views_24h">{{ stats.views_24h }}</strong><small>Rolling traffic window</small></article>
+    <article><span>Location shares</span><strong data-stat="location_shares">{{ stats.location_shares }}</strong><small>Explicit opt-in only</small></article>
+  </section>
+  <div class="stats-columns">
+    <section class="stats-panel" id="data"><h2>Database-backed workload</h2><div class="data-proof"><div><strong data-stat="registered_users">{{ stats.registered_users }}</strong><span>Registered demo users</span></div><div><strong data-stat="appointments">{{ stats.appointments }}</strong><span>Appointment records</span></div></div><a class="portfolio-text-link" href="{{ url_for('register') }}">Exercise the Flask-to-RDS workflow →</a></section>
+    <section class="stats-panel" id="runtime"><h2>Current serving runtime</h2><dl><div><dt>Instance</dt><dd>{{ stats.instance_id }}</dd></div><div><dt>Availability Zone</dt><dd>{{ stats.availability_zone }}</dd></div><div><dt>Health</dt><dd><a href="{{ url_for('health') }}">/health</a></dd></div><div><dt>Readiness</dt><dd><a href="{{ url_for('ready') }}">/ready</a></dd></div></dl></section>
+  </div>
+  <div class="stats-columns">
+    <section class="stats-panel"><h2>Popular application routes</h2><div class="ranking-list" data-popular-routes>{% for route in stats.popular_routes %}<div><code>{{ route.path }}</code><strong>{{ route.views }}</strong></div>{% else %}<p>Traffic will appear after the first recorded request.</p>{% endfor %}</div></section>
+    <section class="stats-panel"><h2>Privacy-conscious location</h2><p>Language and timezone are recorded as coarse operational context. Approximate coordinates are stored only if you explicitly choose to share them, rounded to two decimals.</p><button class="portfolio-button secondary" type="button" data-share-location>Share approximate location</button><p class="location-status" data-location-status>Location has not been requested.</p></section>
+  </div>
+  <section class="privacy-note"><strong>Analytics boundary:</strong> random visitor ID, route, referrer hostname, timestamp, EC2 instance, AZ, browser language, and timezone. No raw IP, email, full referrer URL, or silent precise geolocation is collected.</section>
+</section>
+{% endblock %}

@@ -2,13 +2,15 @@
 
 Terraform portfolio project for a secure, observable three-tier appointment-management platform that can scale automatically and tolerate an Availability Zone failure.
 
-> **Project status:** The infrastructure and original validation workload were deployed in both Lab and HA modes in `us-east-2`, then fully destroyed to stop student-account charges. The repository now includes Phase 2: a database-backed Flask application ready for the next controlled deployment. No AWS resources are currently running.
+> **Project status:** Phase 2 is deployed in Lab mode in `us-east-2` for live validation. The database-backed Flask application is running behind the ALB, with Terraform-managed rolling deployments and documented teardown procedures for cost control.
 
 ![Deployed portfolio application](docs/screenshots/application-overview.png)
 
 _Deployed application reached through the public Application Load Balancer. This screenshot records the initial HTTP validation; the repository now includes an optional ACM-backed HTTPS listener and redirect for use with a validated domain._
 
 ## What this project demonstrates
+
+The detailed [application validation and resilience report](docs/validation-report-2026-08-23.md) records live performance, security, outage-recovery, AWS posture, errors, remediations, evidence commands, and interview talking points.
 
 | Area | Implementation |
 |---|---|
@@ -23,7 +25,7 @@ _Deployed application reached through the public Application Load Balancer. This
 
 ## Cloud Appointment Management Application
 
-Phase 2 replaces the static validation page with a real application named **CloudCare**. The interface is responsive and every navigation control, form, dashboard card, and appointment action is functional.
+Phase 2 preserves the original AWS infrastructure portfolio design as the public landing page and connects its cards, request-flow components, and live counters to a real Flask backend. The CloudCare appointment workflow remains available as the authenticated database demonstration.
 
 | Route | Capability |
 |---|---|
@@ -37,8 +39,19 @@ Phase 2 replaces the static validation page with a real application named **Clou
 | `/api/appointments` | Authenticated JSON representation of the user's records |
 | `/health` | Lightweight ALB process health check |
 | `/ready` | Application-to-RDS readiness check |
+| `/stats` | Live, privacy-conscious engineering analytics dashboard |
+| `/api/stats` | Public JSON aggregates for portfolio traffic and application records |
+| `/api/telemetry` | Browser language/timezone and explicitly consented approximate location |
 
 Passwords are hashed with Werkzeug before being persisted. State-changing forms use CSRF tokens, SQL statements use parameterized values, and all appointment queries are scoped to the authenticated user. The repository does not include a demo password or database credential.
+
+Process health is deliberately decoupled from database readiness. The application starts and serves `/health` even while RDS is restarting, initializes its schema through bounded background retries, returns `503` from `/ready` while the dependency is unavailable, and displays aggregate pages in an explicit degraded mode. This prevents an RDS control-plane event from causing an Auto Scaling replacement loop.
+
+### Live portfolio analytics
+
+The portfolio records hiring-relevant evidence in private RDS: page views, anonymous unique visitors, popular application routes, 24-hour traffic, registered demo users, appointment totals, serving instance ID, and Availability Zone. A random UUID cookie identifies a browser; raw IP addresses are never stored. Referrers are reduced to hostnames, and the browser reports only language and timezone by default.
+
+Approximate coordinates are stored only after a visitor selects **Share approximate location** and grants browser permission. Coordinates are rounded to two decimal places before transmission and storage. Browser geolocation requires HTTPS in modern browsers, so this optional control becomes active when the existing ACM deployment path is enabled.
 
 ## Architecture
 
@@ -116,6 +129,7 @@ Database security group
 - EC2 can read only the specific RDS-managed secret referenced by Terraform.
 - The Flask process retrieves that secret at runtime through the instance role; plaintext credentials are not placed in Terraform, user data, or environment files.
 - User passwords are one-way hashed, forms use CSRF protection, and database queries are parameterized.
+- Portfolio analytics use anonymous random identifiers rather than IP addresses; precise location is never silently collected.
 - MySQL uses a custom `mysql8.4` parameter group with `require_secure_transport=1`.
 - ALB egress is limited to TCP/80 in the private application CIDRs.
 - Application egress is limited to TCP/443 and TCP/3306 in the DB subnet range.

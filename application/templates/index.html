@@ -1,43 +1,52 @@
 {% extends "base.html" %}
-{% block title %}CloudCare | Appointment Management{% endblock %}
+{% block title %}AWS Cloud Infrastructure Portfolio{% endblock %}
+{% block body_class %}portfolio-theme{% endblock %}
 {% block content %}
-<section class="hero">
-  <div class="hero-copy">
-    <span class="eyebrow">AWS-backed appointment operations</span>
-    <h1>Care coordination that feels effortless.</h1>
-    <p>CloudCare gives patients one secure place to schedule, manage, and review appointments while the platform runs across private AWS application and database tiers.</p>
-    <div class="button-row">
-      <a class="button" href="{{ url_for('register') }}">Start scheduling</a>
-      <a class="button button-secondary" href="{{ url_for('login') }}">Open dashboard</a>
-    </div>
-    <div class="trust-row">
-      <span>Encrypted RDS</span><span>No public SSH</span><span>Multi-AZ ready</span>
-    </div>
-  </div>
-  <div class="hero-panel">
-    <div class="panel-top"><span>Upcoming care</span><span class="status-dot">Live</span></div>
-    <article class="appointment-preview">
-      <div class="date-tile"><strong>24</strong><span>SEP</span></div>
-      <div><strong>Annual wellness visit</strong><span>Dr. Maya Chen · 10:30 AM</span></div>
-    </article>
-    <article class="appointment-preview">
-      <div class="date-tile"><strong>08</strong><span>OCT</span></div>
-      <div><strong>Follow-up consultation</strong><span>Virtual visit · 2:00 PM</span></div>
-    </article>
-    <a class="text-link" href="{{ url_for('register') }}">Manage your appointments →</a>
+<section class="portfolio-hero">
+  <p class="portfolio-eyebrow">AWS Cloud Infrastructure Portfolio</p>
+  <h1>Highly Available Web Architecture</h1>
+  <p class="portfolio-intro">A secure three-tier AWS environment provisioned with Terraform. Public traffic enters through an Application Load Balancer while compute and database resources remain inside private subnets across two Availability Zones.</p>
+  <div class="portfolio-actions">
+    <a class="portfolio-button" href="{{ url_for('stats') }}">View live engineering stats</a>
+    <a class="portfolio-button secondary" href="{{ url_for('register') }}">Launch appointment app</a>
+    <a class="portfolio-text-link" href="{{ url_for('stats_api') }}">Open stats API →</a>
   </div>
 </section>
 
-<section class="section">
-  <div class="section-heading"><span class="eyebrow">A real three-tier workload</span><h2>Designed for patients. Engineered for resilience.</h2></div>
-  <div class="feature-grid">
-    <article class="feature-card"><span class="feature-number">01</span><h3>Schedule in seconds</h3><p>Create, update, and cancel appointments through a focused, responsive workflow.</p></article>
-    <article class="feature-card"><span class="feature-number">02</span><h3>Private by design</h3><p>Credentials stay in AWS Secrets Manager and database traffic remains inside private subnets.</p></article>
-    <article class="feature-card"><span class="feature-number">03</span><h3>Operationally ready</h3><p>Health endpoints, Auto Scaling, CloudWatch alarms, and rolling deployments support real operations.</p></article>
+<section class="portfolio-section" id="controls">
+  <div class="portfolio-section-title"><h2>Architecture Controls</h2><p>Security, resilience, and operations are designed into the platform. Select a card to inspect the working backend.</p></div>
+  <div class="portfolio-cards">
+    <a class="portfolio-card" href="{{ url_for('stats') }}#traffic"><span>01</span><h3>Network Isolation</h3><p>The ALB is public while EC2 and encrypted RDS remain private. See real request traffic reaching this tier.</p><b>View traffic →</b></a>
+    <a class="portfolio-card" href="{{ url_for('health') }}"><span>02</span><h3>Elastic Compute</h3><p>A Launch Template and Auto Scaling Group replace unhealthy instances and expose a dedicated health endpoint.</p><b>Call /health →</b></a>
+    <a class="portfolio-card" href="{{ url_for('stats') }}#data"><span>03</span><h3>Encrypted Data</h3><p>RDS stores application and anonymous aggregate records while credentials remain in Secrets Manager.</p><b>View database proof →</b></a>
+    <a class="portfolio-card" href="{{ url_for('stats') }}#runtime"><span>04</span><h3>Systems Manager</h3><p>Administrative access uses Systems Manager rather than SSH. Runtime identity is reported by the active EC2 host.</p><b>Inspect runtime →</b></a>
+    <a class="portfolio-card" href="{{ url_for('stats') }}"><span>05</span><h3>Monitoring</h3><p>Application analytics complement CloudWatch CPU, unhealthy-target, ALB 5xx, and RDS alarms.</p><b>Open live metrics →</b></a>
+    <a class="portfolio-card" href="{{ url_for('register') }}"><span>06</span><h3>Database Application</h3><p>Create a demo account and appointment to exercise authenticated Flask-to-RDS reads and writes.</p><b>Try CloudCare →</b></a>
   </div>
 </section>
 
-<section class="architecture-strip">
-  <div><span>Request path</span><strong>ALB</strong></div><i>→</i><div><span>Web tier</span><strong>Nginx + Gunicorn</strong></div><i>→</i><div><span>Application</span><strong>Flask</strong></div><i>→</i><div><span>Data</span><strong>RDS MySQL</strong></div>
+<section class="portfolio-panel" id="traffic">
+  <div class="portfolio-section-title"><h2>Live Portfolio Activity</h2><p>Anonymous, first-party analytics generated by this running Flask application.</p></div>
+  <div class="live-metrics">
+    <a href="{{ url_for('stats') }}#traffic"><strong data-stat="page_views">{{ stats.page_views }}</strong><span>Page views</span></a>
+    <a href="{{ url_for('stats') }}#traffic"><strong data-stat="unique_visitors">{{ stats.unique_visitors }}</strong><span>Anonymous visitors</span></a>
+    <a href="{{ url_for('stats') }}#data"><strong data-stat="registered_users">{{ stats.registered_users }}</strong><span>Demo users</span></a>
+    <a href="{{ url_for('stats') }}#data"><strong data-stat="appointments">{{ stats.appointments }}</strong><span>Appointments</span></a>
+  </div>
+</section>
+
+<section class="portfolio-panel">
+  <div class="portfolio-section-title"><h2>Request Flow</h2><p>The path this request followed through the live AWS environment.</p></div>
+  <div class="portfolio-flow">
+    <a class="portfolio-service" href="{{ url_for('index') }}">Internet</a><div class="portfolio-arrow">→</div>
+    <a class="portfolio-service" href="{{ url_for('health') }}">Application Load Balancer</a><div class="portfolio-arrow">→</div>
+    <a class="portfolio-service" href="{{ url_for('stats') }}#runtime">Nginx / Gunicorn / Flask</a><div class="portfolio-arrow">→</div>
+    <a class="portfolio-service" href="{{ url_for('appointments_api') if current_user else url_for('register') }}">Private Amazon RDS</a>
+  </div>
+</section>
+
+<section class="portfolio-panel portfolio-runtime" id="runtime">
+  <div><h2>Live Deployment Metadata</h2><p><strong>EC2 Instance:</strong> <code>{{ runtime.instance_id }}</code></p><p><strong>Availability Zone:</strong> <code>{{ runtime.availability_zone }}</code></p><p><strong>Deployment:</strong> <code>Terraform Managed</code></p></div>
+  <div class="portfolio-tags"><span>Terraform</span><span>Amazon VPC</span><span>EC2</span><span>ALB</span><span>Auto Scaling</span><span>RDS</span><span>Flask</span><span>CloudWatch</span></div>
 </section>
 {% endblock %}

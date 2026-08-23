@@ -1,9 +1,13 @@
 import hashlib
 import json
 import os
+import threading
+import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
+from urllib.parse import urlparse
 
 import boto3
 import pymysql
@@ -31,6 +35,19 @@ AWS_CONFIG = Config(
     read_timeout=10,
     user_agent_appid="cloud-appointment/1.0",
 )
+
+TRACKED_ENDPOINTS = {
+    "index",
+    "stats",
+    "login",
+    "register",
+    "dashboard",
+    "profile",
+    "appointments",
+    "appointment_new",
+    "appointment_edit",
+}
+VISITOR_COOKIE = "portfolio_visitor"
 
 
 def required_env(name):
@@ -106,6 +123,37 @@ def initialize_schema(app):
                 REFERENCES users (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """,
+        """
+        CREATE TABLE IF NOT EXISTS visitor_profiles (
+            visitor_id CHAR(36) NOT NULL,
+            first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            browser_language VARCHAR(32) NULL,
+            browser_timezone VARCHAR(80) NULL,
+            location_shared BOOLEAN NOT NULL DEFAULT FALSE,
+            approximate_latitude DECIMAL(5, 2) NULL,
+            approximate_longitude DECIMAL(6, 2) NULL,
+            PRIMARY KEY (visitor_id),
+            KEY idx_visitor_profiles_last_seen (last_seen)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS visitor_events (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            visitor_id CHAR(36) NOT NULL,
+            path VARCHAR(255) NOT NULL,
+            referrer_host VARCHAR(255) NULL,
+            instance_id VARCHAR(32) NOT NULL,
+            availability_zone VARCHAR(32) NOT NULL,
+            visited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY idx_visitor_events_time (visited_at),
+            KEY idx_visitor_events_path (path),
+            KEY idx_visitor_events_visitor (visitor_id),
+            CONSTRAINT fk_visitor_events_profile FOREIGN KEY (visitor_id)
+                REFERENCES visitor_profiles (visitor_id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """,
     ]
     with database(app) as connection:
         with connection.cursor() as cursor:
@@ -113,10 +161,34 @@ def initialize_schema(app):
                 cursor.execute(statement)
 
 
+def initialize_schema_with_retry(app):
+    """Initialize database objects without coupling process health to RDS startup."""
+    delay_seconds = 5
+    for attempt in range(1, 13):
+        try:
+            initialize_schema(app)
+            app.config["DATABASE_AVAILABLE"] = True
+            app.logger.info("Database schema is ready")
+            return
+        except pymysql.MySQLError:
+            app.config["DATABASE_AVAILABLE"] = False
+            app.logger.warning(
+                "Database schema initialization attempt %s failed; retrying in %ss",
+                attempt,
+                delay_seconds,
+                exc_info=True,
+            )
+            time.sleep(delay_seconds)
+            delay_seconds = min(delay_seconds * 2, 60)
+    app.logger.error("Database schema initialization exhausted all retries")
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if "user_id" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify(error="Authentication required"), 401
             flash("Sign in to continue.", "warning")
             return redirect(url_for("login", next=request.path))
         return view(*args, **kwargs)
@@ -125,15 +197,146 @@ def login_required(view):
 
 
 def current_user(app):
-    if "user_id" not in session:
+    if "user_id" not in session or not app.config["DATABASE_AVAILABLE"]:
         return None
+    try:
+        with database(app) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, email, display_name, created_at FROM users WHERE id = %s",
+                    (session["user_id"],),
+                )
+                return cursor.fetchone()
+    except pymysql.MySQLError:
+        app.logger.warning("Current-user lookup failed", exc_info=True)
+        return None
+
+
+def visitor_id_from_request():
+    candidate = request.cookies.get(VISITOR_COOKIE, "")
+    try:
+        return str(uuid.UUID(candidate))
+    except ValueError:
+        return str(uuid.uuid4())
+
+
+def record_page_view(app, visitor_id):
+    referrer_host = urlparse(request.referrer or "").hostname
     with database(app) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT id, email, display_name, created_at FROM users WHERE id = %s",
-                (session["user_id"],),
+                """
+                INSERT INTO visitor_profiles (visitor_id)
+                VALUES (%s)
+                ON DUPLICATE KEY UPDATE last_seen = CURRENT_TIMESTAMP
+                """,
+                (visitor_id,),
             )
-            return cursor.fetchone()
+            cursor.execute(
+                """
+                INSERT INTO visitor_events
+                    (visitor_id, path, referrer_host, instance_id, availability_zone)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    visitor_id,
+                    request.path[:255],
+                    referrer_host[:255] if referrer_host else None,
+                    os.environ.get("INSTANCE_ID", "local-development")[:32],
+                    os.environ.get("AVAILABILITY_ZONE", "local")[:32],
+                ),
+            )
+
+
+def database_stats_snapshot(app):
+    with database(app) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS page_views,
+                       COUNT(DISTINCT visitor_id) AS unique_visitors,
+                       COALESCE(SUM(visited_at >= NOW() - INTERVAL 24 HOUR), 0) AS views_24h,
+                       MIN(visited_at) AS tracking_since
+                FROM visitor_events
+                """
+            )
+            traffic = cursor.fetchone()
+            cursor.execute("SELECT COUNT(*) AS registered_users FROM users")
+            users = cursor.fetchone()
+            cursor.execute("SELECT COUNT(*) AS appointments FROM appointments")
+            appointments = cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT path, COUNT(*) AS views
+                FROM visitor_events
+                GROUP BY path ORDER BY views DESC, path ASC LIMIT 5
+                """
+            )
+            popular_routes = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT browser_timezone AS timezone, COUNT(*) AS visitors
+                FROM visitor_profiles
+                WHERE browser_timezone IS NOT NULL
+                GROUP BY browser_timezone ORDER BY visitors DESC, timezone ASC LIMIT 5
+                """
+            )
+            timezones = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS location_shares
+                FROM visitor_profiles WHERE location_shared = TRUE
+                """
+            )
+            locations = cursor.fetchone()
+
+    snapshot = {
+        **traffic,
+        **users,
+        **appointments,
+        **locations,
+        "popular_routes": popular_routes,
+        "timezones": timezones,
+        "instance_id": os.environ.get("INSTANCE_ID", "local-development"),
+        "availability_zone": os.environ.get("AVAILABILITY_ZONE", "local"),
+    }
+    for key in (
+        "page_views",
+        "unique_visitors",
+        "views_24h",
+        "registered_users",
+        "appointments",
+        "location_shares",
+    ):
+        snapshot[key] = int(snapshot.get(key) or 0)
+    return snapshot
+
+
+def stats_snapshot(app):
+    unavailable = {
+        "page_views": 0,
+        "unique_visitors": 0,
+        "views_24h": 0,
+        "registered_users": 0,
+        "appointments": 0,
+        "location_shares": 0,
+        "tracking_since": None,
+        "popular_routes": [],
+        "timezones": [],
+        "instance_id": os.environ.get("INSTANCE_ID", "local-development"),
+        "availability_zone": os.environ.get("AVAILABILITY_ZONE", "local"),
+        "database_available": False,
+    }
+    if not app.config["DATABASE_AVAILABLE"]:
+        return unavailable
+    try:
+        snapshot = database_stats_snapshot(app)
+        snapshot["database_available"] = True
+        return snapshot
+    except pymysql.MySQLError:
+        app.config["DATABASE_AVAILABLE"] = False
+        app.logger.warning("Statistics database query failed", exc_info=True)
+        return unavailable
 
 
 def create_app():
@@ -149,9 +352,15 @@ def create_app():
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
         PERMANENT_SESSION_LIFETIME=3600,
+        DATABASE_AVAILABLE=False,
     )
     CSRFProtect(app)
-    initialize_schema(app)
+    threading.Thread(
+        target=initialize_schema_with_retry,
+        args=(app,),
+        name="schema-initializer",
+        daemon=True,
+    ).start()
 
     @app.after_request
     def security_headers(response):
@@ -162,6 +371,30 @@ def create_app():
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+    @app.after_request
+    def anonymous_analytics(response):
+        visitor_id = visitor_id_from_request()
+        if (
+            request.method == "GET"
+            and request.endpoint in TRACKED_ENDPOINTS
+            and response.status_code < 400
+            and app.config["DATABASE_AVAILABLE"]
+        ):
+            try:
+                record_page_view(app, visitor_id)
+            except pymysql.MySQLError:
+                app.logger.warning("Page-view analytics write failed", exc_info=True)
+        if request.cookies.get(VISITOR_COOKIE) != visitor_id:
+            response.set_cookie(
+                VISITOR_COOKIE,
+                visitor_id,
+                max_age=31536000,
+                httponly=True,
+                secure=app.config["SESSION_COOKIE_SECURE"],
+                samesite="Lax",
+            )
         return response
 
     @app.context_processor
@@ -176,7 +409,84 @@ def create_app():
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", stats=stats_snapshot(app))
+
+    @app.get("/stats")
+    def stats():
+        return render_template("stats.html", stats=stats_snapshot(app))
+
+    @app.get("/api/stats")
+    def stats_api():
+        snapshot = stats_snapshot(app)
+        if snapshot["tracking_since"]:
+            snapshot["tracking_since"] = snapshot["tracking_since"].isoformat()
+        return jsonify(snapshot)
+
+    @app.post("/api/telemetry")
+    def telemetry_api():
+        if not app.config["DATABASE_AVAILABLE"]:
+            return jsonify(error="Database temporarily unavailable"), 503
+        payload = request.get_json(silent=True) or {}
+        language = str(payload.get("language", ""))[:32] or None
+        timezone = str(payload.get("timezone", ""))[:80] or None
+        visitor_id = visitor_id_from_request()
+
+        latitude = payload.get("latitude")
+        longitude = payload.get("longitude")
+        location_shared = latitude is not None and longitude is not None
+        if location_shared:
+            try:
+                latitude = round(float(latitude), 2)
+                longitude = round(float(longitude), 2)
+            except (TypeError, ValueError):
+                return jsonify(error="Invalid coordinates"), 400
+            if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                return jsonify(error="Coordinates outside valid range"), 400
+
+        try:
+            with database(app) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                    """
+                    INSERT INTO visitor_profiles
+                        (visitor_id, browser_language, browser_timezone,
+                         location_shared, approximate_latitude, approximate_longitude)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        last_seen = CURRENT_TIMESTAMP,
+                        browser_language = COALESCE(VALUES(browser_language), browser_language),
+                        browser_timezone = COALESCE(VALUES(browser_timezone), browser_timezone),
+                        location_shared = location_shared OR VALUES(location_shared),
+                        approximate_latitude = COALESCE(VALUES(approximate_latitude), approximate_latitude),
+                        approximate_longitude = COALESCE(VALUES(approximate_longitude), approximate_longitude)
+                    """,
+                        (
+                            visitor_id,
+                            language,
+                            timezone,
+                            location_shared,
+                            latitude if location_shared else None,
+                            longitude if location_shared else None,
+                        ),
+                    )
+        except pymysql.MySQLError:
+            return jsonify(error="Database temporarily unavailable"), 503
+
+        response = jsonify(
+            stored=True,
+            location_shared=location_shared,
+            precision="approximately 1 km" if location_shared else None,
+        )
+        if request.cookies.get(VISITOR_COOKIE) != visitor_id:
+            response.set_cookie(
+                VISITOR_COOKIE,
+                visitor_id,
+                max_age=31536000,
+                httponly=True,
+                secure=app.config["SESSION_COOKIE_SECURE"],
+                samesite="Lax",
+            )
+        return response
 
     @app.get("/health")
     def health():
@@ -189,8 +499,10 @@ def create_app():
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1 AS ready")
                     cursor.fetchone()
+            app.config["DATABASE_AVAILABLE"] = True
             return jsonify(status="ready", database="connected")
         except pymysql.MySQLError:
+            app.config["DATABASE_AVAILABLE"] = False
             return jsonify(status="not-ready", database="unavailable"), 503
 
     @app.route("/register", methods=["GET", "POST"])

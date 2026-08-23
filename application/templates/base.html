@@ -4,10 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="CloudCare appointment management platform running on AWS.">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}CloudCare{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='portfolio.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="site-header">
     <a class="brand" href="{{ url_for('index') }}">
       <span class="brand-mark">C</span>
@@ -16,6 +18,7 @@
     <button class="nav-toggle" type="button" aria-label="Toggle navigation" data-nav-toggle>Menu</button>
     <nav class="nav" data-nav>
       <a href="{{ url_for('index') }}">Platform</a>
+      <a href="{{ url_for('stats') }}">Live stats</a>
       {% if current_user %}
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
         <a href="{{ url_for('appointments') }}">Appointments</a>
