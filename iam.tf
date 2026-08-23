@@ -44,9 +44,12 @@ resource "aws_iam_role_policy" "application_artifact_access" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid      = "ReadApplicationArtifact"
-      Effect   = "Allow"
-      Action   = "s3:GetObject"
+      Sid    = "ReadApplicationArtifact"
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ]
       Resource = "${aws_s3_bucket.application_artifacts.arn}/${aws_s3_object.application.key}"
     }]
   })
