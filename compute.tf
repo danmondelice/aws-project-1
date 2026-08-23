@@ -45,7 +45,17 @@ resource "aws_launch_template" "app" {
   }
 
 
-  user_data = base64encode(file("${path.module}/user_data.sh"))
+  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+    application_bucket    = aws_s3_bucket.application_artifacts.id
+    application_key       = aws_s3_object.application.key
+    application_version   = aws_s3_object.application.version_id
+    aws_region            = var.aws_region
+    database_host         = aws_db_instance.main.address
+    database_name         = aws_db_instance.main.db_name
+    database_port         = aws_db_instance.main.port
+    database_secret_arn   = aws_db_instance.main.master_user_secret[0].secret_arn
+    session_cookie_secure = var.acm_certificate_arn == null ? "false" : "true"
+  }))
 
 
   metadata_options {
@@ -120,6 +130,8 @@ resource "aws_autoscaling_group" "app" {
 
   depends_on = [
     aws_route_table_association.app_az1,
-    aws_route_table_association.app_az2
+    aws_route_table_association.app_az2,
+    aws_iam_role_policy.application_artifact_access,
+    aws_iam_role_policy.database_secret_access
   ]
 }

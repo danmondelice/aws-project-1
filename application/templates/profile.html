@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Profile | CloudCare{% endblock %}
+{% block content %}
+<section class="page-shell narrow">
+  <div class="page-heading"><div><span class="eyebrow">Account</span><h1>Your profile</h1><p>Identity information for this demonstration workspace.</p></div></div>
+  <article class="content-card profile-card"><div class="avatar">{{ current_user.display_name[0] | upper }}</div><div><h2>{{ current_user.display_name }}</h2><p>{{ current_user.email }}</p><span class="badge">Member since {{ current_user.created_at.strftime('%B %Y') }}</span></div></article>
+</section>
+{% endblock %}

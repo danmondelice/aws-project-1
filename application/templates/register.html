@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Create account | CloudCare{% endblock %}
+{% block content %}
+<section class="auth-layout">
+  <div class="auth-intro"><span class="eyebrow">Get started</span><h1>A simpler way to manage appointments.</h1><p>Create a portfolio demo account. Passwords are securely hashed before storage and are never committed to the repository.</p></div>
+  <form class="form-card" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>Create account</h2>
+    <label>Full name<input type="text" name="display_name" autocomplete="name" maxlength="120" required></label>
+    <label>Email address<input type="email" name="email" autocomplete="email" required></label>
+    <label>Password<input type="password" name="password" autocomplete="new-password" minlength="10" required><small>Use at least 10 characters.</small></label>
+    <button class="button button-block" type="submit">Create secure account</button>
+  </form>
+</section>
+{% endblock %}

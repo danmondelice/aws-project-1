@@ -92,3 +92,8 @@ output "database_secret_arn" {
   description = "ARN of the RDS-managed Secrets Manager secret"
   value       = aws_db_instance.main.master_user_secret[0].secret_arn
 }
+
+output "application_artifact_bucket" {
+  description = "Private S3 bucket used for versioned application artifacts"
+  value       = aws_s3_bucket.application_artifacts.id
+}

@@ -1,8 +1,8 @@
 # Highly Available AWS Web Architecture
 
-Terraform portfolio project for a secure, observable three-tier web platform that can scale automatically and tolerate an Availability Zone failure.
+Terraform portfolio project for a secure, observable three-tier appointment-management platform that can scale automatically and tolerate an Availability Zone failure.
 
-> **Project status:** The architecture was deployed and validated in both Lab and HA modes in `us-east-2`, then fully destroyed to stop student-account charges. Terraform destroyed 44 managed resources and the final state is empty. The code remains ready to rebuild.
+> **Project status:** The infrastructure and original validation workload were deployed in both Lab and HA modes in `us-east-2`, then fully destroyed to stop student-account charges. The repository now includes Phase 2: a database-backed Flask application ready for the next controlled deployment. No AWS resources are currently running.
 
 ![Deployed portfolio application](docs/screenshots/application-overview.png)
 
@@ -19,6 +19,26 @@ _Deployed application reached through the public Application Load Balancer. This
 | Operations | ALB health checks, rolling instance refresh, CPU target tracking, CloudWatch alarms, SNS |
 | Cost control | `ha_mode` switches between an economical lab footprint and production-style HA |
 | Reproducibility | Versioned Terraform configuration, immutable EC2 bootstrap, documented validation and teardown |
+| Application engineering | Flask, Gunicorn, Nginx, signed sessions, CSRF protection, MySQL CRUD, JSON API |
+
+## Cloud Appointment Management Application
+
+Phase 2 replaces the static validation page with a real application named **CloudCare**. The interface is responsive and every navigation control, form, dashboard card, and appointment action is functional.
+
+| Route | Capability |
+|---|---|
+| `/` | Public product and architecture landing page |
+| `/register` / `/login` | Account creation and authenticated sessions |
+| `/dashboard` | Appointment summary, quick actions, and live EC2 metadata |
+| `/profile` | Authenticated user profile |
+| `/appointments` | User-scoped appointment records |
+| `/appointments/new` | MySQL-backed appointment creation |
+| `/appointments/<id>/edit` | Update or change appointment status |
+| `/api/appointments` | Authenticated JSON representation of the user's records |
+| `/health` | Lightweight ALB process health check |
+| `/ready` | Application-to-RDS readiness check |
+
+Passwords are hashed with Werkzeug before being persisted. State-changing forms use CSRF tokens, SQL statements use parameterized values, and all appointment queries are scoped to the authenticated user. The repository does not include a demo password or database credential.
 
 ## Architecture
 
@@ -31,7 +51,7 @@ _Deployed application reached through the public Application Load Balancer. This
                  NAT Gateway 1         NAT Gateway 2 (HA)
                        |                      |
               App subnet AZ1          App subnet AZ2
-                 EC2 / ASG               EC2 / ASG
+          Nginx → Gunicorn → Flask  Nginx → Gunicorn → Flask
                        \                      /
                     Application security group
                                   |
@@ -55,7 +75,7 @@ Application subnets receive the largest allocation because the horizontally scal
 
 ![Application request flow and deployment metadata](docs/screenshots/application-request-flow.png)
 
-The ALB is the only public application entry point. It forwards traffic to private EC2 instances registered by the Auto Scaling Group. RDS accepts MySQL only from the application security group and has no public route or public endpoint.
+The ALB is the only public application entry point. It forwards traffic to Nginx on private EC2 instances registered by the Auto Scaling Group. Nginx proxies to Gunicorn on loopback, Gunicorn runs the Flask application, and RDS accepts MySQL only from the application security group. RDS has no public route or public endpoint.
 
 ## Lab and HA modes
 
@@ -94,6 +114,8 @@ Database security group
 - EC2 root volumes and RDS storage are encrypted.
 - RDS manages the master password directly in Secrets Manager.
 - EC2 can read only the specific RDS-managed secret referenced by Terraform.
+- The Flask process retrieves that secret at runtime through the instance role; plaintext credentials are not placed in Terraform, user data, or environment files.
+- User passwords are one-way hashed, forms use CSRF protection, and database queries are parameterized.
 - MySQL uses a custom `mysql8.4` parameter group with `require_secure_transport=1`.
 - ALB egress is limited to TCP/80 in the private application CIDRs.
 - Application egress is limited to TCP/443 and TCP/3306 in the DB subnet range.
@@ -147,16 +169,17 @@ The initial application and ALB alarms reported `OK`. Hardened HA validation lat
 
 ## Immutable application delivery
 
-The Nginx landing page is built by `user_data.sh` through the EC2 Launch Template. Updates follow an immutable rollout:
+Terraform packages the `application/` directory as a ZIP archive and stores it as a versioned object in a private, encrypted S3 bucket. The EC2 role can read only that object. The exact S3 version is included in Launch Template user data, so an application source change produces a new artifact and a new Launch Template version.
 
-1. Change and syntax-check `user_data.sh`.
-2. Terraform creates a new Launch Template version.
-3. The ASG references that explicit version.
-4. Instance refresh launches a replacement.
-5. The ALB waits for the new target to become healthy.
-6. Auto Scaling drains and terminates the old instance.
+1. Update and test the Flask source under `application/`.
+2. Terraform builds the application archive and uploads a new S3 object version.
+3. A new numeric Launch Template version references that immutable artifact.
+4. Instance refresh launches a replacement in a private application subnet.
+5. Bootstrap installs Nginx, Python, Gunicorn, and application dependencies.
+6. The application retrieves RDS credentials dynamically with the EC2 IAM role.
+7. The ALB verifies `/health`, then Auto Scaling drains the old target.
 
-The landing-page upgrade was deployed with `0 add, 2 change, 0 destroy`; the version-2 target became healthy before the version-1 instance terminated.
+The prior landing-page upgrade already proved this rolling replacement pattern. Phase 2 extends it so application code is a first-class, versioned deployment artifact rather than a large inline shell payload.
 
 ## Deploy the project
 
@@ -255,7 +278,9 @@ terraform plan -detailed-exitcode
 | `security_groups.tf` | Tier boundaries and egress restrictions |
 | `iam.tf` | EC2/SSM and RDS monitoring roles |
 | `load_balancer.tf` | ALB, target group, HTTP/optional HTTPS listeners |
-| `compute.tf` / `user_data.sh` | Launch Template, ASG, immutable bootstrap |
+| `application.tf` | Private encrypted/versioned S3 application artifact |
+| `application/` | Flask application, templates, styling, and runtime dependencies |
+| `compute.tf` / `user_data.sh` | Launch Template, ASG, Nginx/Gunicorn bootstrap |
 | `database.tf` | RDS, subnet group, TLS parameter group |
 | `monitoring.tf` | Scaling policy, CloudWatch alarms, SNS |
 | `outputs.tf` | Deployment endpoints and resource identifiers |
@@ -285,7 +310,7 @@ Do not commit `terraform.tfstate`, `terraform.tfstate.backup`, `terraform.tfvars
 - Use customer-managed KMS keys with scoped key policies.
 - Add RDS connection, latency, event, and failover alarms from workload baselines.
 - Enable Session Manager session logging, CloudTrail, AWS Config, GuardDuty, and Security Hub.
-- Add CI validation, linting, policy-as-code, and OIDC-based AWS authentication.
+- Add automated Flask tests, schema migrations, CI validation, linting, policy-as-code, and OIDC-based AWS authentication.
 - Move Terraform state to an encrypted, versioned remote backend with locking.
 
 ## Detailed engineering record

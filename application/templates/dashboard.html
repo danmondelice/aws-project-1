@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | CloudCare{% endblock %}
+{% block content %}
+<section class="page-shell">
+  <div class="page-heading"><div><span class="eyebrow">Patient dashboard</span><h1>Hello, {{ current_user.display_name }}.</h1><p>Here is the current state of your appointment workspace.</p></div><a class="button" href="{{ url_for('appointment_new') }}">Schedule appointment</a></div>
+  <div class="metric-grid">
+    <article class="metric-card"><span>Total appointments</span><strong>{{ summary.total }}</strong></article>
+    <article class="metric-card"><span>Scheduled</span><strong>{{ summary.scheduled }}</strong></article>
+    <article class="metric-card metric-wide"><span>Next appointment</span><strong>{{ summary.next_appointment.strftime('%b %d, %Y · %I:%M %p') if summary.next_appointment else 'Nothing scheduled' }}</strong></article>
+  </div>
+  <div class="dashboard-grid">
+    <article class="content-card"><h2>Quick actions</h2><a class="action-row" href="{{ url_for('appointments') }}"><span>View all appointments</span><b>→</b></a><a class="action-row" href="{{ url_for('profile') }}"><span>Review profile</span><b>→</b></a><a class="action-row" href="{{ url_for('appointments_api') }}"><span>Open JSON API</span><b>→</b></a></article>
+    <article class="content-card"><h2>Live infrastructure</h2><dl class="detail-list"><div><dt>Instance</dt><dd>{{ runtime.instance_id }}</dd></div><div><dt>Availability Zone</dt><dd>{{ runtime.availability_zone }}</dd></div><div><dt>Health check</dt><dd><a href="{{ url_for('ready') }}">Database readiness</a></dd></div></dl></article>
+  </div>
+</section>
+{% endblock %}

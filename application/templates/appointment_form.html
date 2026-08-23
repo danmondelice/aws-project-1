@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if appointment else 'New' }} appointment | CloudCare{% endblock %}
+{% block content %}
+<section class="page-shell narrow">
+  <div class="page-heading"><div><span class="eyebrow">{{ 'Update visit' if appointment else 'Schedule care' }}</span><h1>{{ 'Edit appointment' if appointment else 'New appointment' }}</h1><p>All fields are stored in the private encrypted MySQL database.</p></div></div>
+  <form class="form-card form-wide" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <label>Service<input type="text" name="service_name" maxlength="120" value="{{ appointment.service_name if appointment else '' }}" placeholder="Annual wellness visit" required></label>
+      <label>Provider<input type="text" name="provider_name" maxlength="120" value="{{ appointment.provider_name if appointment else '' }}" placeholder="Dr. Maya Chen" required></label>
+      <label>Date and time<input type="datetime-local" name="appointment_at" value="{{ appointment.appointment_at.strftime('%Y-%m-%dT%H:%M') if appointment else '' }}" required></label>
+      {% if appointment %}<label>Status<select name="status"><option {% if appointment.status == 'Scheduled' %}selected{% endif %}>Scheduled</option><option {% if appointment.status == 'Completed' %}selected{% endif %}>Completed</option><option {% if appointment.status == 'Cancelled' %}selected{% endif %}>Cancelled</option></select></label>{% endif %}
+    </div>
+    <label>Notes<textarea name="notes" maxlength="2000" rows="5" placeholder="Optional details for the visit">{{ appointment.notes if appointment and appointment.notes else '' }}</textarea></label>
+    <div class="button-row"><button class="button" type="submit">{{ 'Save changes' if appointment else 'Schedule appointment' }}</button><a class="button button-secondary" href="{{ url_for('appointments') }}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

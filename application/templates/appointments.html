@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Appointments | CloudCare{% endblock %}
+{% block content %}
+<section class="page-shell">
+  <div class="page-heading"><div><span class="eyebrow">Care schedule</span><h1>Appointments</h1><p>Manage scheduled and completed visits in one place.</p></div><a class="button" href="{{ url_for('appointment_new') }}">New appointment</a></div>
+  {% if appointments %}
+    <div class="appointment-list">
+      {% for appointment in appointments %}
+        <article class="appointment-card">
+          <div class="date-tile large"><strong>{{ appointment.appointment_at.strftime('%d') }}</strong><span>{{ appointment.appointment_at.strftime('%b') | upper }}</span></div>
+          <div class="appointment-main"><span class="badge badge-{{ appointment.status | lower }}">{{ appointment.status }}</span><h2>{{ appointment.service_name }}</h2><p>{{ appointment.provider_name }} · {{ appointment.appointment_at.strftime('%I:%M %p') }}</p>{% if appointment.notes %}<small>{{ appointment.notes }}</small>{% endif %}</div>
+          <div class="appointment-actions"><a class="button button-secondary button-small" href="{{ url_for('appointment_edit', appointment_id=appointment.id) }}">Edit</a><form method="post" action="{{ url_for('appointment_delete', appointment_id=appointment.id) }}" data-confirm="Delete this appointment?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="danger-link" type="submit">Delete</button></form></div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><span>+</span><h2>Your schedule is open</h2><p>Create your first appointment to prove the full Flask-to-RDS write path.</p><a class="button" href="{{ url_for('appointment_new') }}">Schedule an appointment</a></div>
+  {% endif %}
+</section>
+{% endblock %}

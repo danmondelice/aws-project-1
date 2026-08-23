@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Sign in | CloudCare{% endblock %}
+{% block content %}
+<section class="auth-layout">
+  <div class="auth-intro"><span class="eyebrow">Welcome back</span><h1>Your care schedule, organized.</h1><p>Sign in to view upcoming appointments, update details, and manage your profile.</p></div>
+  <form class="form-card" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>Sign in</h2>
+    <label>Email address<input type="email" name="email" autocomplete="email" required></label>
+    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="button button-block" type="submit">Sign in securely</button>
+    <p class="form-note">New to CloudCare? <a href="{{ url_for('register') }}">Create an account</a>.</p>
+  </form>
+</section>
+{% endblock %}
