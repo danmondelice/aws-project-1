@@ -200,3 +200,22 @@ No secret value was printed or copied into this report.
 - Add analytics retention/deletion policy and a user-facing privacy notice.
 - Use an encrypted remote Terraform backend with locking.
 - Run sustained load, AZ-failure, and Multi-AZ database-failover tests in HA mode.
+
+## Final teardown verification
+
+After validation, the Lab environment was intentionally destroyed to stop student-account charges. The interactive Terraform destroy plan contained only the 51 resources managed by this project and was approved after review.
+
+Final evidence:
+
+- `terraform destroy` completed successfully: **51 destroyed**.
+- `terraform state list` returned no managed resources.
+- Project-filtered VPC query returned `[]`.
+- Available, pending, or deleting project NAT Gateway query returned `[]`.
+- Project Elastic IP query returned `[]`.
+- Project ALB and Auto Scaling Group queries returned `[]`.
+- Project EC2 query found no pending, running, stopping, or stopped instances.
+- Project RDS, S3 bucket, and IAM role queries returned `[]`.
+- `terraform.tfstate` and `terraform.tfstate.backup` remain preserved locally and ignored by Git.
+- The repository and Git history were preserved; no unrelated AWS resources were changed.
+
+Resource identifiers such as the former ALB DNS name, EC2 instance IDs, and RDS endpoint in this report are historical validation evidence and are no longer live.

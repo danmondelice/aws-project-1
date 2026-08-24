@@ -2,7 +2,7 @@
 
 Terraform portfolio project for a secure, observable three-tier appointment-management platform that can scale automatically and tolerate an Availability Zone failure.
 
-> **Project status:** Phase 2 is deployed in Lab mode in `us-east-2` for live validation. The database-backed Flask application is running behind the ALB, with Terraform-managed rolling deployments and documented teardown procedures for cost control.
+> **Project status:** Complete. Phase 2 was deployed and validated in Lab mode in `us-east-2`, including database-outage and immutable replacement testing. The environment was then destroyed successfully: Terraform removed 51 resources, its state is empty, and project-filtered AWS checks found no orphaned billable infrastructure.
 
 ![Deployed portfolio application](docs/screenshots/application-overview.png)
 
